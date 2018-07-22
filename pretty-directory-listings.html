@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title><span class="dquo">&#8220;</span>Pretty directory&nbsp;listings&#8221; - Apache 101</title>
+        <meta charset="utf-8" />
+        <link href="https://dnknth.github.io/theme/static/css/bootstrap.min.css" rel="stylesheet" />
+        <link href="https://dnknth.github.io/theme/static/css/style.css" rel="stylesheet" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    </head>
+
+    <body id="index" class="archive">
+        <div class="container">
+            <div class="header">
+                <ul class="nav nav-pills pull-right">
+                    <li class=""><a href="https://dnknth.github.io">Home</a></li>
+                    <li><a href="https://dnknth.github.io/archives.html">Archives</a></li>
+                </ul>
+                <h3 class="text-muted"><a href="https://dnknth.github.io">Apache 101</a></h3>
+				<h2 class="text-muted"></h2>
+             </div>
+<section id="content" class="article content">
+  <header>
+    <h2 class="entry-title">
+      <a href="https://dnknth.github.io/pretty-directory-listings.html" rel="bookmark"
+         title="Permalink to “Pretty directory listings”"><span class="dquo">&#8220;</span>Pretty directory&nbsp;listings&#8221;</a></h2>
+ 
+  </header>
+  
+     
+  <div class="entry-content">
+    <p>In this post, the techniques of the previous posts are combined for pretty directory listings. Most of the heavy lifting is done in the browser, requiring only <a href="static-resources.html">static files</a> on the&nbsp;server.</p>
+<p>Out-of-the-box Apache directory listings still have that minimalist oh-so-90s look. You can do better than&nbsp;that.</p>
+<h1>Ingredients</h1>
+<p>For elegant listings, get <a href="https://github.com/oupala/apaxy">Apaxy</a>. It uses the beautiful <a href="https://www.gnome-look.org/content/show.php/Faenza?content=128143">Faenza icon theme</a>:</p>
+<div class="highlight"><pre><span></span>    <span class="nb">cd</span> /usr/local/share <span class="p">;</span> git clone https://github.com/oupala/apaxy.git
+</pre></div>
+
+
+<p>It looks like this: <img alt="Apaxy listing" src="images/apaxy.png"></p>
+<h1>Configuration</h1>
+<p>Next, add this to <code>/etc/apache2/options/apaxy.conf</code>. It is an edited copy of <code>/usr/local/share/apaxy/apaxy/htaccess.txt</code> with bits taken from <code>/usr/local/share/apaxy/apache-config.conf</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="c"># Apaxy by @adamwhitcroft</span>
+    <span class="c">#</span>
+    <span class="c"># For a full breakdown of the mod_autoindex module:</span>
+    <span class="c"># http://httpd.apache.org/docs/2.4/mod/mod_autoindex.html</span>
+
+    <span class="nb">Alias</span> /.apaxy <span class="sx">/usr/local/share/apaxy/apaxy/theme</span>
+
+    <span class="nt">&lt;Directory</span> <span class="s">/usr/local/share/apaxy/apaxy/theme/</span><span class="nt">&gt;</span>
+        <span class="nb">Require</span> <span class="k">all</span> granted
+        <span class="nb">Options</span> <span class="k">none</span>
+        <span class="nb">Include</span> options/expires.conf
+        <span class="nb">Include</span> options/nolog.conf
+    <span class="nt">&lt;/Directory&gt;</span>
+
+    <span class="nt">&lt;IfModule</span> <span class="s">mod_autoindex.c</span><span class="nt">&gt;</span>
+
+        <span class="c"># INDEX OPTIONS</span>
+        <span class="nb">IndexOptions</span> +Charset=UTF-8 +FancyIndexing +IgnoreCase +FoldersFirst +XHTML +HTMLTable +SuppressRules +SuppressDescription +NameWidth=* +IconsAreLinks
+
+        <span class="c"># META VIEWPORT</span>
+        <span class="nb">IndexHeadInsert</span> <span class="s2">&quot;&lt;meta name=\&quot;viewport\&quot; content=\&quot;width=device-width, initial-scale=1\&quot; /&gt;&quot;</span>
+
+        <span class="c"># HIDE STUFF</span>
+        <span class="nb">IndexIgnore</span> <span class="s2">&quot;.??* *~ *# HEADER* README* RCS CVS *,v *,t&quot;</span>
+
+        <span class="c"># GENERAL ICONS (BLANK, DIRECTORY, PARENT DIRECTORY)</span>
+        <span class="nb">AddIcon</span> /.apaxy/icons/blank.png ^^BLANKICON^^
+        <span class="nb">AddIcon</span> /.apaxy/icons/folder.png ^^DIRECTORY^^
+        <span class="nb">AddIcon</span> /.apaxy/icons/folder-home.png ..
+
+        <span class="nb">AddIconByType</span> (TXT,/.apaxy/icons/text.png) text/*
+        <span class="nb">AddIconByType</span> (IMG,/.apaxy/icons/image.png) image/*
+        <span class="nb">AddIconByType</span> (SND,/.apaxy/icons/audio.png) audio/*
+        <span class="nb">AddIconByType</span> (VID,/.apaxy/icons/video.png) video/*
+
+        <span class="c"># EXTENSION SPECIFIC ICONS</span>
+        <span class="nb">AddIcon</span> /.apaxy/icons/archive.png .7z .bz2 .cab .gz .tar
+        <span class="nb">AddIcon</span> /.apaxy/icons/audio.png .aac .aif .aifc .aiff .ape .au .flac .iff .m4a .mid .mp3 .mpa .ra .wav .wma .f4a .f4b .oga .ogg .xm .it .s3m .mod
+        <span class="nb">AddIcon</span> /.apaxy/icons/bin.png .bin .hex
+        <span class="nb">AddIcon</span> /.apaxy/icons/bmp.png .bmp
+        <span class="nb">AddIcon</span> /.apaxy/icons/c.png .c
+        <span class="nb">AddIcon</span> /.apaxy/icons/calc.png .xlsx .xlsm .xltx .xltm .xlam .xlr .xls .csv
+        <span class="nb">AddIcon</span> /.apaxy/icons/cd.png .iso
+        <span class="nb">AddIcon</span> /.apaxy/icons/cpp.png .cpp
+        <span class="nb">AddIcon</span> /.apaxy/icons/css.png .css .sass .scss
+        <span class="nb">AddIcon</span> /.apaxy/icons/deb.png .deb
+        <span class="nb">AddIcon</span> /.apaxy/icons/doc.png .doc .docx .docm .dot .dotx .dotm .log .msg .odt .pages .rtf .tex .wpd .wps
+        <span class="nb">AddIcon</span> /.apaxy/icons/draw.png .svg .svgz
+        <span class="nb">AddIcon</span> /.apaxy/icons/eps.png .ai .eps
+        <span class="nb">AddIcon</span> /.apaxy/icons/exe.png .exe
+        <span class="nb">AddIcon</span> /.apaxy/icons/gif.png .gif
+        <span class="nb">AddIcon</span> /.apaxy/icons/h.png .h
+        <span class="nb">AddIcon</span> /.apaxy/icons/html.png .html .xhtml .shtml .htm .URL .url
+        <span class="nb">AddIcon</span> /.apaxy/icons/ico.png .ico
+        <span class="nb">AddIcon</span> /.apaxy/icons/java.png .jar
+        <span class="nb">AddIcon</span> /.apaxy/icons/jpg.png .jpg .jpeg .jpe
+        <span class="nb">AddIcon</span> /.apaxy/icons/js.png .js .json
+        <span class="nb">AddIcon</span> /.apaxy/icons/markdown.png .html
+        <span class="nb">AddIcon</span> /.apaxy/icons/package.png .pkg .dmg
+        <span class="nb">AddIcon</span> /.apaxy/icons/pdf.png .pdf
+        <span class="nb">AddIcon</span> /.apaxy/icons/php.png .php .phtml
+        <span class="nb">AddIcon</span> /.apaxy/icons/playlist.png .m3u .m3u8 .pls .pls8
+        <span class="nb">AddIcon</span> /.apaxy/icons/png.png .png
+        <span class="nb">AddIcon</span> /.apaxy/icons/ps.png .ps
+        <span class="nb">AddIcon</span> /.apaxy/icons/psd.png .psd
+        <span class="nb">AddIcon</span> /.apaxy/icons/py.png .py
+        <span class="nb">AddIcon</span> /.apaxy/icons/rar.png .rar
+        <span class="nb">AddIcon</span> /.apaxy/icons/rb.png .rb
+        <span class="nb">AddIcon</span> /.apaxy/icons/rpm.png .rpm
+        <span class="nb">AddIcon</span> /.apaxy/icons/rss.png .rss
+        <span class="nb">AddIcon</span> /.apaxy/icons/script.png .bat .cmd .sh
+        <span class="nb">AddIcon</span> /.apaxy/icons/sql.png .sql
+        <span class="nb">AddIcon</span> /.apaxy/icons/tiff.png .tiff .tif
+        <span class="nb">AddIcon</span> /.apaxy/icons/text.png .txt .nfo
+        <span class="nb">AddIcon</span> /.apaxy/icons/video.png .asf .asx .avi .flv .mkv .mov .mp4 .mpg .rm .srt .swf .vob .wmv .m4v .f4v .f4p .ogv
+        <span class="nb">AddIcon</span> /.apaxy/icons/xml.png .xml
+        <span class="nb">AddIcon</span> /.apaxy/icons/zip.png .zip
+        <span class="nb">DefaultIcon</span> /.apaxy/icons/default.png
+
+        <span class="c"># THEME FILES</span>
+        <span class="nb">HeaderName</span> /.apaxy/header.html
+        <span class="c"># ReadmeName /.apaxy/footer.html</span>
+        <span class="nb">IndexStyleSheet</span> /.apaxy/style.css
+
+    <span class="nt">&lt;/IfModule&gt;</span>
+</pre></div>
+
+
+<p>You could precompress files in <code>/usr/local/share/apaxy/apaxy/theme</code>, but this will make a mess in case of updates, and the bit of extra latency does not hurt much. Note that the <code>header.html</code> and <code>footer.html</code> files <strong>must not</strong> be precompressed, because they are included in the generated&nbsp;pages.</p>
+<p>Note that <code>ReadmeName /.apaxy/footer.html</code> is commented out. To use it, you would need to replace <code>/{FOLDERNAME}/theme</code> by <code>/.apaxy</code>. This will happen in a&nbsp;minute.</p>
+<p>Activate it to any virtual host or directory like&nbsp;so:</p>
+<div class="highlight"><pre><span></span>    <span class="nb">Include</span> options/apaxy.conf
+</pre></div>
+
+
+<p>Happy? Well, so far it&#8217;s only style. There is still room for&nbsp;usability.</p>
+<p>Want to view images in a pop-up instead of using the back button? Scroll through them? Have them displayed in a slide show? Then read&nbsp;on.</p>
+<h1>Image&nbsp;boxes</h1>
+<p>To prepare, install <a href="http://jquery.com/download/">JQuery</a> to <code>/usr/local/share/javascript/jquery</code>, and <a href="https://github.com/jackmoore/colorbox/">Colorbox</a> to <code>/usr/local/share/javascript/colorbox</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="nb">cd</span> /usr/local/share
+    mkdir -p javascript/jquery <span class="p">;</span> <span class="nb">cd</span> javascript
+    git clone https://github.com/jackmoore/colorbox.git
+    <span class="nb">cd</span> jquery
+    wget https://code.jquery.com/jquery-3.3.1.min.js
+</pre></div>
+
+
+<p>For shared Javascript resources, add the following to <code>options/javascript.conf</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="nb">Alias</span> /.js <span class="sx">/usr/local/share/javascript</span>
+    <span class="nt">&lt;Directory</span> <span class="s">/usr/local/share/javascript</span><span class="nt">&gt;</span>
+        <span class="nb">Options</span> <span class="k">None</span>
+        <span class="nb">Require</span> <span class="k">all</span> granted
+        <span class="nb">Include</span> options/expires.conf
+        <span class="nb">Include</span> options/nolog.conf
+        <span class="nb">Include</span> options/precompressed.conf
+    <span class="nt">&lt;/Directory&gt;</span>
+</pre></div>
+
+
+<p>Feel free to precompress the <span class="caps">JS</span> and <span class="caps">CSS</span> files in <code>/usr/local/share/javascript</code>, but keep in mind to uncompress everything before making&nbsp;updates.</p>
+<p>Now comes the fun part. First, add some configuration to <code>options/apaxy-gallery.conf</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="nb">Include</span> options/apaxy.conf
+    <span class="nb">Include</span> options/javascript.conf
+
+    <span class="nb">Alias</span> /.gallery <span class="sx">/usr/local/share/apaxy-gallery</span>
+    <span class="nt">&lt;Directory</span> <span class="s">/usr/local/share/apaxy-gallery</span><span class="nt">&gt;</span>
+        <span class="nb">Options</span> <span class="k">None</span>
+        <span class="nb">Require</span> <span class="k">all</span> granted
+        <span class="nb">Include</span> options/expires.conf
+        <span class="nb">Include</span> options/nolog.conf
+        <span class="nb">Include</span> options/precompressed.conf
+    <span class="nt">&lt;/Directory&gt;</span>
+
+    <span class="nb">HeaderName</span> /.gallery/header.html
+    <span class="nb">ReadmeName</span> /.gallery/footer.html
+</pre></div>
+
+
+<p>Note the nested <code>Include</code> statements, and that the generic <code>header.html</code> from the previous section is replaced, and a new <code>footer.html</code> is&nbsp;added. </p>
+<p>Add <code>/usr/local/share/apaxy-gallery/header.html</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="p">&lt;</span><span class="nt">link</span> <span class="na">rel</span><span class="o">=</span><span class="s">&quot;stylesheet&quot;</span> <span class="na">href</span><span class="o">=</span><span class="s">&quot;/.js/colorbox/example1/colorbox.css&quot;</span> <span class="p">/&gt;</span>
+    <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;/.js/jquery/jquery-3.3.1.min.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+    <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;/.js/colorbox/jquery.colorbox-min.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+    <span class="p">&lt;</span><span class="nt">script</span> <span class="na">type</span><span class="o">=</span><span class="s">&quot;text/javascript&quot;</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;/.gallery/gallery.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+
+    <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&quot;wrapper&quot;</span><span class="p">&gt;</span>
+</pre></div>
+
+
+<p>and <code>/usr/local/share/apaxy-gallery/footer.html</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span><span class="c">&lt;!-- /.wrapper --&gt;</span>
+
+    <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&quot;footer&quot;</span><span class="p">&gt;</span>
+        Apaxy by <span class="p">&lt;</span><span class="nt">a</span> <span class="na">href</span><span class="o">=</span><span class="s">&quot;https://twitter.com/adamwhitcroft&quot;</span><span class="p">&gt;</span>@adamwhitcroft<span class="p">&lt;/</span><span class="nt">a</span><span class="p">&gt;</span>
+    <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span><span class="c">&lt;!-- /.footer --&gt;</span>
+    <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;/.apaxy/apaxy.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+</pre></div>
+
+
+<p>Finally, add <code>/usr/local/share/apaxy-gallery/gallery.js</code> and precompress it if you&nbsp;like:</p>
+<div class="highlight"><pre><span></span>    <span class="nx">$</span><span class="p">(</span><span class="nb">document</span><span class="p">).</span><span class="nx">ready</span><span class="p">(</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nx">$</span><span class="p">(</span><span class="s1">&#39;td.indexcolname a[href$=&quot;.jpg&quot;], \</span>
+<span class="s1">           td.indexcolname a[href$=&quot;.png&quot;], \</span>
+<span class="s1">           td.indexcolname a[href$=&quot;.svg&quot;]&#39;</span><span class="p">)</span>
+            <span class="p">.</span><span class="nx">each</span><span class="p">(</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+                <span class="nx">$</span><span class="p">(</span><span class="k">this</span><span class="p">).</span><span class="nx">attr</span><span class="p">(</span> <span class="s1">&#39;title&#39;</span><span class="p">,</span> <span class="nx">$</span><span class="p">(</span><span class="k">this</span><span class="p">).</span><span class="nx">text</span><span class="p">());</span>
+            <span class="p">})</span>
+            <span class="p">.</span><span class="nx">colorbox</span><span class="p">({</span>
+                <span class="nx">rel</span><span class="o">:</span> <span class="s1">&#39;gallery&#39;</span><span class="p">,</span>
+                <span class="nx">maxWidth</span><span class="o">:</span>  <span class="s1">&#39;100%&#39;</span><span class="p">,</span>
+                <span class="nx">maxHeight</span><span class="o">:</span> <span class="s1">&#39;100%&#39;</span><span class="p">,</span>
+            <span class="p">});</span>
+    <span class="p">});</span>
+</pre></div>
+
+
+<p>For a slide show of all images in a directory, add to the colorbox options somthing like this and put the result in <code>/usr/local/share/apaxy-gallery/slideshow.js</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="nx">open</span><span class="o">:</span> <span class="kc">true</span><span class="p">,</span>
+    <span class="nx">slideshow</span><span class="o">:</span> <span class="kc">true</span><span class="p">,</span>
+    <span class="nx">slideshowSpeed</span><span class="o">:</span> <span class="mi">3000</span><span class="p">,</span>
+</pre></div>
+
+
+<p>The colorbox will open automatically, and the next image will show every 3 seconds. Check the <a href="http://www.jacklmoore.com/colorbox/">Colorbox documentation</a> for more&nbsp;options.</p>
+<p>To enable the gallery and fancy listings, add to virtual&nbsp;hosts:</p>
+<div class="highlight"><pre><span></span>    <span class="nb">Include</span> options/apaxy-gallery.conf
+</pre></div>
+
+
+<p>You can override the behaviour per directory, e.g.&nbsp;with:</p>
+<div class="highlight"><pre><span></span>    <span class="nb">HeaderName</span> /.gallery/slideshow.html
+</pre></div>
+
+
+<p>Have fun! The <a href="svn.html">next post</a> explains how a similar style can be added to <a href="https://subversion.apache.org">Subversion</a>&nbsp;listings.</p>
+  </div><!-- /.entry-content -->
+   <footer class="post-info text-muted">
+    Posted on <abbr class="published" title="2018-06-10T21:48:32+02:00">
+      2018-06-10
+    </abbr>
+    <address class="vcard author">
+      by <a class="url fn" href="https://dnknth.github.io/author/daniel-knauth.html">Daniel Knauth</a>
+    </address>
+  </footer><!-- /.post-info -->
+</section>
+            <footer id="contentinfo" class="footer">
+                    <address id="about" class="vcard body">
+                    &copy; <a href="https://dnknth.github.io">Daniel Knauth</a>. Powered by <a href="http://getpelican.com/">Pelican</a>.
+                    </address><!-- /#about -->
+            </footer><!-- /#contentinfo -->
+        </div><!-- container -->
+    </body>
+</html>

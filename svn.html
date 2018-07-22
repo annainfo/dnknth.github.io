@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title><span class="dquo">&#8220;</span><span class="caps">SVN</span>&#8221; - Apache 101</title>
+        <meta charset="utf-8" />
+        <link href="https://dnknth.github.io/theme/static/css/bootstrap.min.css" rel="stylesheet" />
+        <link href="https://dnknth.github.io/theme/static/css/style.css" rel="stylesheet" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    </head>
+
+    <body id="index" class="archive">
+        <div class="container">
+            <div class="header">
+                <ul class="nav nav-pills pull-right">
+                    <li class=""><a href="https://dnknth.github.io">Home</a></li>
+                    <li><a href="https://dnknth.github.io/archives.html">Archives</a></li>
+                </ul>
+                <h3 class="text-muted"><a href="https://dnknth.github.io">Apache 101</a></h3>
+				<h2 class="text-muted"></h2>
+             </div>
+<section id="content" class="article content">
+  <header>
+    <h2 class="entry-title">
+      <a href="https://dnknth.github.io/svn.html" rel="bookmark"
+         title="Permalink to “SVN”"><span class="dquo">&#8220;</span><span class="caps">SVN</span>&#8221;</a></h2>
+ 
+  </header>
+  
+     
+  <div class="entry-content">
+    <p>Still using <a href="https://subversion.apache.org">Subversion</a>? Oh my, you <em>are</em> old school. The cool kids use <a href="https://git-scm.com">Git</a> these days. But since this series is all about Apache, and Subversion is neatly integrated, let&#8217;s march&nbsp;on.</p>
+<p>This post will first cover some basics, and then build on <a href="pretty-directory-listings.html">Fancy directory listings</a> for pretty looks, and finally explain a <a href="https://en.wikipedia.org/wiki/MacGyver_(1985_TV_series)">MacGyver</a> (but convenient) deployment&nbsp;technique.</p>
+<h1>Basic&nbsp;setup</h1>
+<p>Obviously, you need to enable some Apache&nbsp;modules:</p>
+<div class="highlight"><pre><span></span>sudo a2enmod dav_svn
+sudo a2enmod authz_svn
+</pre></div>
+
+
+<p>Now, a very basic setup in a virtual host would look like&nbsp;this:</p>
+<div class="highlight"><pre><span></span>    <span class="nt">&lt;Location</span> <span class="s">/svn</span><span class="nt">&gt;</span>
+        <span class="nb">DAV</span> svn
+        <span class="nb">SVNParentPath</span> <span class="sx">/var/lib/svn</span>
+        <span class="nb">AuthzSVNAccessFile</span> <span class="sx">/etc/apache2/svn.authz</span>
+
+        <span class="nt">&lt;IfModule</span> <span class="s">mod_headers.c</span><span class="nt">&gt;</span>
+            <span class="nt">&lt;Limit</span> <span class="s">GET</span><span class="nt">&gt;</span>
+                <span class="nb">Header</span> set Cache-Control <span class="s2">&quot;no-cache, no-store, must-revalidate&quot;</span>
+                <span class="nb">Header</span> set Pragma <span class="s2">&quot;no-cache&quot;</span>
+                <span class="nb">Header</span> set Expires <span class="m">0</span>
+            <span class="nt">&lt;/Limit&gt;</span>
+        <span class="nt">&lt;/IfModule&gt;</span>
+    <span class="nt">&lt;/Location&gt;</span>
+</pre></div>
+
+
+<p>In the example above, <a href="http://httpd.apache.org/docs/2.4/en/mod/mod_authz_core.html#require">access controls</a> are missing, add them as needed. The <code>&lt;Limit GET&gt;</code> section prevents caching of stale files when you browse&nbsp;repositories.</p>
+<p>After setting up authentication, add <code>/etc/apache2/svn.authz</code> and <a href="http://svnbook.red-bean.com/en/1.7/svn.serverconfig.pathbasedauthz.html">tweak it</a>. Some people argue against path based authorization, but in my experience you&#8217;ll need it sooner or&nbsp;later.</p>
+<div class="highlight"><pre><span></span>    <span class="k">[/]</span>
+    <span class="na">*</span> <span class="o">=</span> <span class="s"></span>
+<span class="s">    $authenticated = rw</span>
+</pre></div>
+
+
+<p>Now, having the boring part out of the way, move on to make it&nbsp;pretty.</p>
+<h1>Pimp my <span class="caps">SVN</span>&nbsp;style</h1>
+<p><span class="caps">SVN</span> listings are <span class="caps">XML</span>, and they look crappy. The general strategy&nbsp;is:</p>
+<ul>
+<li>Render <span class="caps">XML</span> as <span class="caps">HTML</span></li>
+<li>Apply the Apaxy style to&nbsp;it</li>
+<li>Add the usability improvements from the <a href="pretty-directory-listings.html">last&nbsp;post</a></li>
+</ul>
+<p>For a result like this read&nbsp;on:</p>
+<p><img alt="SVN listing" src="images/svn-styled.png"></p>
+<p>First, create a directory <code>/usr/local/share/apaxy-svn</code> and add <code>options/apaxy-svn.conf</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="nb">Include</span> options/apaxy-gallery.conf
+    <span class="nb">Alias</span> /.apaxy-svn <span class="sx">/usr/local/share/apaxy-svn</span>
+
+    <span class="nt">&lt;Directory</span> <span class="s">/usr/local/share/apaxy-svn/</span><span class="nt">&gt;</span>
+        <span class="nb">Require</span> <span class="k">all</span> granted
+        <span class="nb">Options</span> <span class="k">none</span>
+        <span class="nb">Include</span> options/expires.conf
+        <span class="nb">Include</span> options/nolog.conf
+        <span class="nb">Include</span> options/precompressed.conf
+
+        <span class="nb">AddType</span> text/xml .xslt
+    <span class="nt">&lt;/Directory&gt;</span>
+</pre></div>
+
+
+<p>Second, add this  <span class="caps">XSLT</span> stylesheet in <code>/usr/local/share/apaxy-svn/index.xslt</code>. Like every <span class="caps">XSLT</span>, it&#8217;s ugly, but causes the browser to render <span class="caps">XML</span> as <span class="caps">HTML</span>. Precompress it if you&nbsp;like:</p>
+<div class="highlight"><pre><span></span>    <span class="cp">&lt;?xml version=&quot;1.0&quot;?&gt;</span>
+    <span class="nt">&lt;xsl:stylesheet</span> <span class="na">xmlns:xsl=</span><span class="s">&quot;http://www.w3.org/1999/XSL/Transform&quot;</span> <span class="na">version=</span><span class="s">&quot;1.0&quot;</span><span class="nt">&gt;</span>
+
+      <span class="nt">&lt;xsl:output</span> <span class="na">method=</span><span class="s">&quot;html&quot;</span> <span class="nt">/&gt;</span>
+
+      <span class="nt">&lt;xsl:template</span> <span class="na">match=</span><span class="s">&quot;*&quot;</span> <span class="nt">/&gt;</span>
+
+      <span class="nt">&lt;xsl:template</span> <span class="na">match=</span><span class="s">&quot;svn&quot;</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;html&gt;</span>
+          <span class="nt">&lt;head&gt;</span>
+            <span class="nt">&lt;title&gt;</span>
+              <span class="nt">&lt;xsl:if</span> <span class="na">test=</span><span class="s">&quot;string-length(index/@name) != 0&quot;</span><span class="nt">&gt;</span>
+                <span class="nt">&lt;xsl:value-of</span> <span class="na">select=</span><span class="s">&quot;index/@name&quot;</span> <span class="nt">/&gt;</span>:
+              <span class="nt">&lt;/xsl:if&gt;</span>
+              <span class="nt">&lt;xsl:value-of</span> <span class="na">select=</span><span class="s">&quot;index/@path&quot;</span> <span class="nt">/&gt;</span>
+            <span class="nt">&lt;/title&gt;</span>
+            <span class="nt">&lt;meta</span> <span class="na">name=</span><span class="s">&quot;viewport&quot;</span> <span class="na">content=</span><span class="s">&quot;width=device-width, initial-scale=1&quot;</span> <span class="nt">/&gt;</span>
+            <span class="nt">&lt;link</span> <span class="na">rel=</span><span class="s">&quot;stylesheet&quot;</span> <span class="na">type=</span><span class="s">&quot;text/css&quot;</span> <span class="na">href=</span><span class="s">&quot;/.apaxy/style.css&quot;</span> <span class="nt">/&gt;</span>
+            <span class="nt">&lt;link</span> <span class="na">rel=</span><span class="s">&quot;stylesheet&quot;</span> <span class="na">type=</span><span class="s">&quot;text/css&quot;</span> <span class="na">href=</span><span class="s">&quot;/.apaxy-svn/style.css&quot;</span> <span class="nt">/&gt;</span>
+            <span class="nt">&lt;link</span> <span class="na">rel=</span><span class="s">&quot;stylesheet&quot;</span> <span class="na">href=</span><span class="s">&quot;/.js/colorbox/example1/colorbox.css&quot;</span> <span class="nt">/&gt;</span>
+            <span class="nt">&lt;script</span> <span class="na">src=</span><span class="s">&quot;/.js/jquery/jquery-3.3.1.min.js&quot;</span><span class="nt">&gt;&lt;/script&gt;</span>
+            <span class="nt">&lt;script</span> <span class="na">src=</span><span class="s">&quot;/.js/colorbox/jquery.colorbox-min.js&quot;</span><span class="nt">&gt;&lt;/script&gt;</span>
+            <span class="nt">&lt;script</span> <span class="na">src=</span><span class="s">&quot;/.apaxy-svn/colorbox.js&quot;</span><span class="nt">&gt;&lt;/script&gt;</span>
+          <span class="nt">&lt;/head&gt;</span>
+          <span class="nt">&lt;body&gt;</span>
+            <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;wrapper&quot;</span><span class="nt">&gt;</span>
+              <span class="nt">&lt;xsl:apply-templates</span> <span class="nt">/&gt;</span>
+                <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;footer&quot;</span><span class="nt">&gt;</span>
+                  <span class="nt">&lt;xsl:element</span> <span class="na">name=</span><span class="s">&quot;a&quot;</span><span class="nt">&gt;</span>
+                    <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;href&quot;</span><span class="nt">&gt;</span>
+                      <span class="nt">&lt;xsl:value-of</span> <span class="na">select=</span><span class="s">&quot;@href&quot;</span> <span class="nt">/&gt;</span>
+                    <span class="nt">&lt;/xsl:attribute&gt;</span>
+                    Subversion
+                  <span class="nt">&lt;/xsl:element&gt;</span>
+                  <span class="nt">&lt;xsl:value-of</span> <span class="na">select=</span><span class="s">&quot;@version&quot;</span> <span class="nt">/&gt;</span>
+                <span class="nt">&lt;/div&gt;</span>
+            <span class="nt">&lt;/div&gt;</span>
+          <span class="nt">&lt;/body&gt;</span>
+        <span class="nt">&lt;/html&gt;</span>
+      <span class="nt">&lt;/xsl:template&gt;</span>
+
+      <span class="nt">&lt;xsl:template</span> <span class="na">match=</span><span class="s">&quot;index&quot;</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;h1&gt;</span>
+          <span class="nt">&lt;xsl:if</span> <span class="na">test=</span><span class="s">&quot;string-length(@name) != 0&quot;</span><span class="nt">&gt;</span>
+            <span class="nt">&lt;xsl:value-of</span> <span class="na">select=</span><span class="s">&quot;@name&quot;</span> <span class="nt">/&gt;</span>
+            <span class="nt">&lt;xsl:if</span> <span class="na">test=</span><span class="s">&quot;string-length(@rev) != 0&quot;</span><span class="nt">&gt;</span>
+               <span class="ni">&amp;#8212;</span> 
+            <span class="nt">&lt;/xsl:if&gt;</span>
+          <span class="nt">&lt;/xsl:if&gt;</span>
+          <span class="nt">&lt;xsl:value-of</span> <span class="na">select=</span><span class="s">&quot;@base&quot;</span> <span class="nt">/&gt;</span>
+          <span class="nt">&lt;xsl:if</span> <span class="na">test=</span><span class="s">&quot;@path != &#39;/&#39;&quot;</span><span class="nt">&gt;</span>
+              <span class="nt">&lt;xsl:value-of</span> <span class="na">select=</span><span class="s">&quot;@path&quot;</span> <span class="nt">/&gt;</span>
+          <span class="nt">&lt;/xsl:if&gt;</span>
+          <span class="nt">&lt;xsl:if</span> <span class="na">test=</span><span class="s">&quot;string-length(@rev) != 0&quot;</span><span class="nt">&gt;</span>
+             @<span class="nt">&lt;xsl:value-of</span> <span class="na">select=</span><span class="s">&quot;@rev&quot;</span> <span class="nt">/&gt;</span>
+          <span class="nt">&lt;/xsl:if&gt;</span>
+        <span class="nt">&lt;/h1&gt;</span>
+
+        <span class="nt">&lt;xsl:if</span> <span class="na">test=</span><span class="s">&quot;updir&quot;</span><span class="nt">&gt;</span>
+          <span class="nt">&lt;xsl:apply-templates</span> <span class="na">select=</span><span class="s">&quot;updir&quot;</span> <span class="nt">/&gt;</span>
+        <span class="nt">&lt;/xsl:if&gt;</span>
+
+        <span class="nt">&lt;xsl:apply-templates</span> <span class="na">select=</span><span class="s">&quot;dir&quot;</span> <span class="nt">/&gt;</span>
+        <span class="nt">&lt;xsl:apply-templates</span> <span class="na">select=</span><span class="s">&quot;file&quot;</span> <span class="nt">/&gt;</span>
+
+      <span class="nt">&lt;/xsl:template&gt;</span>
+
+      <span class="nt">&lt;xsl:template</span> <span class="na">match=</span><span class="s">&quot;updir&quot;</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;dir&quot;</span><span class="nt">&gt;</span>
+          <span class="nt">&lt;xsl:element</span> <span class="na">name=</span><span class="s">&quot;a&quot;</span><span class="nt">&gt;</span>
+            <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;href&quot;</span><span class="nt">&gt;</span>..<span class="nt">&lt;/xsl:attribute&gt;</span>
+              <span class="nt">&lt;xsl:element</span> <span class="na">name=</span><span class="s">&quot;img&quot;</span><span class="nt">&gt;</span>
+                <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/folder-parent-old.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+              <span class="nt">&lt;/xsl:element&gt;</span>
+              ..
+          <span class="nt">&lt;/xsl:element&gt;</span>
+        <span class="nt">&lt;/div&gt;</span>
+      <span class="nt">&lt;/xsl:template&gt;</span>
+
+      <span class="nt">&lt;xsl:template</span> <span class="na">match=</span><span class="s">&quot;dir&quot;</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;dir&quot;</span><span class="nt">&gt;</span>
+          <span class="nt">&lt;xsl:element</span> <span class="na">name=</span><span class="s">&quot;a&quot;</span><span class="nt">&gt;</span>
+            <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;href&quot;</span><span class="nt">&gt;</span>
+          <span class="nt">&lt;xsl:value-of</span> <span class="na">select=</span><span class="s">&quot;@href&quot;</span> <span class="nt">/&gt;</span>
+            <span class="nt">&lt;/xsl:attribute&gt;</span>
+            <span class="nt">&lt;xsl:element</span> <span class="na">name=</span><span class="s">&quot;img&quot;</span><span class="nt">&gt;</span>
+              <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/folder.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+            <span class="nt">&lt;/xsl:element&gt;</span>
+          <span class="nt">&lt;/xsl:element&gt;</span>
+          <span class="nt">&lt;xsl:element</span> <span class="na">name=</span><span class="s">&quot;a&quot;</span><span class="nt">&gt;</span>
+            <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;href&quot;</span><span class="nt">&gt;</span>
+              <span class="nt">&lt;xsl:value-of</span> <span class="na">select=</span><span class="s">&quot;@href&quot;</span> <span class="nt">/&gt;</span>
+            <span class="nt">&lt;/xsl:attribute&gt;</span>
+            <span class="nt">&lt;xsl:text&gt;</span> <span class="nt">&lt;/xsl:text&gt;</span>
+            <span class="nt">&lt;xsl:value-of</span> <span class="na">select=</span><span class="s">&quot;@name&quot;</span> <span class="nt">/&gt;</span>/
+          <span class="nt">&lt;/xsl:element&gt;</span>
+        <span class="nt">&lt;/div&gt;</span>
+        <span class="c">&lt;!-- &lt;xsl:apply-templates/ --&gt;</span>
+      <span class="nt">&lt;/xsl:template&gt;</span>
+
+      <span class="nt">&lt;xsl:template</span> <span class="na">match=</span><span class="s">&quot;file&quot;</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;file&quot;</span><span class="nt">&gt;</span>
+          <span class="nt">&lt;xsl:element</span> <span class="na">name=</span><span class="s">&quot;a&quot;</span><span class="nt">&gt;</span>
+            <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;href&quot;</span><span class="nt">&gt;</span>
+              <span class="nt">&lt;xsl:value-of</span> <span class="na">select=</span><span class="s">&quot;@href&quot;</span> <span class="nt">/&gt;</span>
+            <span class="nt">&lt;/xsl:attribute&gt;</span>
+            <span class="nt">&lt;xsl:element</span> <span class="na">name=</span><span class="s">&quot;img&quot;</span><span class="nt">&gt;</span>
+                <span class="nt">&lt;xsl:choose&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;Makefile&#39;) or contains( @name, &#39;makefile&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/makefile.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;README&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/readme.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.&#39;) = false&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/unknown.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;substring-before( @name, &#39;.&#39;) = &#39;&#39;&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/default.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.md&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/markdown.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.html&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/html.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.css&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/css.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.yml&#39;) or contains( @name, &#39;.yaml&#39;) or contains( @name, &#39;.conf&#39;) or contains( @name, &#39;.cf&#39;) or contains( @name, &#39;.ini&#39;) or contains( @name, &#39;.properties&#39;) or contains( @name, &#39;.cgi&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/source.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.js&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/js.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.java&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/java.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.jar&#39;) or contains( @name, &#39;.zip&#39;) or contains( @name, &#39;.7z&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/zip.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.tar&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/tar.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.py&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/py.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.rb&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/rb.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.php&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/php.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.sql&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/sql.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.png&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/png.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.ico&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/ico.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.jpg&#39;) or contains( @name, &#39;.jpeg&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/jpg.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.gif&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/gif.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.bmp&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/bmp.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.svg&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/image.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.pdf&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/pdf.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.rtf&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/rtf.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.doc&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/doc.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.xls&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/calc.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.txt&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/text.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.xml&#39;) or contains( @name, &#39;.xsl&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/xml.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.log&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/log.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.mp3&#39;) or contains( @name, &#39;.flac&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/audio.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.mp4&#39;) or contains( @name, &#39;.mpeg&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/video.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.gz&#39;) or contains( @name, &#39;.tgz&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/gzip.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:when</span> <span class="na">test=</span><span class="s">&quot;contains( @name, &#39;.sh&#39;) or contains( @name, &#39;.bat&#39;) or contains( @name, &#39;.cmd&#39;)&quot;</span><span class="nt">&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/script.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:when&gt;</span>
+                  <span class="nt">&lt;xsl:otherwise&gt;</span>
+                          <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;src&quot;</span><span class="nt">&gt;</span>/.apaxy/icons/bin.png<span class="nt">&lt;/xsl:attribute&gt;</span>
+                  <span class="nt">&lt;/xsl:otherwise&gt;</span>
+                <span class="nt">&lt;/xsl:choose&gt;</span>
+            <span class="nt">&lt;/xsl:element&gt;</span>
+          <span class="nt">&lt;/xsl:element&gt;</span>
+          <span class="nt">&lt;xsl:element</span> <span class="na">name=</span><span class="s">&quot;a&quot;</span><span class="nt">&gt;</span>
+            <span class="nt">&lt;xsl:attribute</span> <span class="na">name=</span><span class="s">&quot;href&quot;</span><span class="nt">&gt;</span>
+              <span class="nt">&lt;xsl:value-of</span> <span class="na">select=</span><span class="s">&quot;@href&quot;</span> <span class="nt">/&gt;</span>
+            <span class="nt">&lt;/xsl:attribute&gt;</span>
+            <span class="nt">&lt;xsl:text&gt;</span> <span class="nt">&lt;/xsl:text&gt;</span>
+            <span class="nt">&lt;xsl:value-of</span> <span class="na">select=</span><span class="s">&quot;@name&quot;</span> <span class="nt">/&gt;</span>
+          <span class="nt">&lt;/xsl:element&gt;</span>
+        <span class="nt">&lt;/div&gt;</span>
+        <span class="c">&lt;!-- xsl:apply-templates/ --&gt;</span>
+      <span class="nt">&lt;/xsl:template&gt;</span>
+
+    <span class="nt">&lt;/xsl:stylesheet&gt;</span>
+</pre></div>
+
+
+<p>You have probably noticed that some <span class="caps">CSS</span> and <span class="caps">JS</span> is still missing. Add this to <code>/usr/local/share/apaxy-svn/style.css</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="nt">h1</span> <span class="p">{</span>
+        <span class="k">margin-bottom</span><span class="p">:</span> <span class="mi">1</span><span class="kt">em</span><span class="p">;</span>
+        <span class="k">font-size</span><span class="p">:</span> <span class="kc">large</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="nt">img</span> <span class="p">{</span>
+        <span class="k">margin-right</span><span class="p">:</span> <span class="mi">1</span><span class="kt">em</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="p">.</span><span class="nc">file</span><span class="o">,</span> <span class="p">.</span><span class="nc">dir</span> <span class="p">{</span>
+      <span class="k">border-bottom</span><span class="p">:</span> <span class="mi">1</span><span class="kt">px</span> <span class="kc">solid</span> <span class="mh">#CCC</span><span class="p">;</span>
+      <span class="k">margin</span><span class="p">:</span> <span class="mi">4</span><span class="kt">px</span> <span class="mi">0</span><span class="kt">px</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="p">.</span><span class="nc">dir</span><span class="p">:</span><span class="nd">hover</span><span class="o">,</span> <span class="p">.</span><span class="nc">file</span><span class="p">:</span><span class="nd">hover</span> <span class="p">{</span>
+      <span class="k">background</span><span class="p">:</span> <span class="mh">#FFE</span><span class="p">;</span>
+    <span class="p">}</span>
+</pre></div>
+
+
+<p>This goes into <code>/usr/local/share/apaxy-svn/colorbox.js</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="nx">$</span><span class="p">(</span><span class="nb">document</span><span class="p">).</span><span class="nx">ready</span><span class="p">(</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nx">$</span><span class="p">(</span><span class="s1">&#39;div.file a[href$=&quot;.png&quot;]:last-child, \</span>
+<span class="s1">           div.file a[href$=&quot;.jpg&quot;]:last-child, \</span>
+<span class="s1">           div.file a[href$=&quot;.svg&quot;]:last-child, \</span>
+<span class="s1">           div.file a[href$=&quot;.gif&quot;]:last-child, \</span>
+<span class="s1">           div.file a[href$=&quot;.ico&quot;]:last-child&#39;</span><span class="p">)</span>
+            <span class="p">.</span><span class="nx">each</span><span class="p">(</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+                <span class="nx">$</span><span class="p">(</span><span class="k">this</span><span class="p">).</span><span class="nx">attr</span><span class="p">(</span> <span class="s1">&#39;title&#39;</span><span class="p">,</span> <span class="nx">$</span><span class="p">(</span><span class="k">this</span><span class="p">).</span><span class="nx">text</span><span class="p">());</span>
+            <span class="p">})</span>
+            <span class="p">.</span><span class="nx">colorbox</span><span class="p">({</span>
+                <span class="nx">rel</span><span class="o">:</span> <span class="s1">&#39;gallery&#39;</span><span class="p">,</span>
+                <span class="nx">maxWidth</span><span class="o">:</span> <span class="s1">&#39;100%&#39;</span><span class="p">,</span>
+                <span class="nx">maxHeight</span><span class="o">:</span> <span class="s1">&#39;100%&#39;</span><span class="p">,</span>
+            <span class="p">});</span>
+    <span class="p">});</span>
+</pre></div>
+
+
+<p>Now, activate the styling in your virtual host like&nbsp;so:</p>
+<div class="highlight"><pre><span></span>    <span class="nb">Include</span> options/apaxy-svn.conf
+
+    <span class="nt">&lt;Location</span> <span class="s">/svn</span><span class="nt">&gt;</span>
+        <span class="c"># configuration...</span>
+        <span class="nb">SVNIndexXSLT</span> /.apaxy-svn/index.xslt
+        <span class="c"># more configuration...</span>
+    <span class="nt">&lt;/Location&gt;</span>
+</pre></div>
+
+
+<p>After reloading the Apache config, browse to your <span class="caps">SVN</span> repository. It should look very much like a <a href="pretty-directory-listings.html">directory listing</a> with popup images. Hope you like&nbsp;it.</p>
+<h1>Serving low-traffic sites from <span class="caps">SVN</span></h1>
+<p>For low-traffic sites, it is tempting to shorten the normal edit-commit-build-deploy cycle by serving content straight from <span class="caps">SVN</span>. Disclaimer: Everybody advises against this. But for static sites with little traffic it does not&nbsp;hurt.</p>
+<p>Let&#8217;s say you keep your source code in <code>/svn/www.example.org</code> and the main page is <code>index.html</code>.</p>
+<p>For starters, you need to add an access rule for anonymous users in <code>/etc/apache2/svn.authz</code>. Good that you already configured path-based&nbsp;authorization: </p>
+<div class="highlight"><pre><span></span>    <span class="k">[www.example.org:/]</span>
+    <span class="na">*</span> <span class="o">=</span> <span class="s">r</span>
+<span class="s">    $authenticated = rw</span>
+</pre></div>
+
+
+<p>Next, put this in <code>sites-available/www.example.org</code> and enable&nbsp;it:</p>
+<div class="highlight"><pre><span></span>    <span class="nt">&lt;VirtualHost</span> <span class="s">*:80</span><span class="nt">&gt;</span>
+        <span class="nb">ServerName</span> www.example.org
+        <span class="nb">ServerAlias</span> example.org
+        <span class="nb">ServerAdmin</span> you@example.org
+
+        <span class="nb">DocumentRoot</span> <span class="sx">/var/www</span>
+
+        <span class="nb">Include</span> options/expires.conf
+        <span class="nb">Include</span> options/xss.conf
+
+        <span class="nt">&lt;IfModule</span> <span class="s">mod_rewrite.c</span><span class="nt">&gt;</span>
+            <span class="nb">RewriteEngine</span> <span class="k">On</span>
+            <span class="nb">RewriteRule</span> ^/$    <span class="sx">/index.html</span> [N]
+            <span class="nb">RewriteRule</span> ^/([^.].*) <span class="sx">/svn/www.example.org/</span>$1 [PT]
+        <span class="nt">&lt;/IfModule&gt;</span>
+
+        <span class="nt">&lt;Location</span> <span class="s">/svn</span><span class="nt">&gt;</span>
+            <span class="nb">DAV</span> svn
+            <span class="nb">SVNParentPath</span> <span class="sx">/var/lib/svn</span>
+            <span class="nb">AuthzSVNAccessFile</span> <span class="sx">/etc/apache2/svn.authz</span>
+
+            <span class="nt">&lt;LimitExcept</span> <span class="s">GET</span><span class="nt">&gt;</span>
+                <span class="nb">Require</span> <span class="k">all</span> denied
+            <span class="nt">&lt;/LimitExcept&gt;</span>
+
+        <span class="nt">&lt;/Location&gt;</span>
+
+    <span class="nt">&lt;/VirtualHost&gt;</span>
+</pre></div>
+
+
+<p>Now, as an exercise, add <span class="caps">TLS</span> to the config as explained in the <a href="security.html">security post</a>.</p>
+  </div><!-- /.entry-content -->
+   <footer class="post-info text-muted">
+    Posted on <abbr class="published" title="2018-06-12T22:34:15+02:00">
+      2018-06-12
+    </abbr>
+    <address class="vcard author">
+      by <a class="url fn" href="https://dnknth.github.io/author/daniel-knauth.html">Daniel Knauth</a>
+    </address>
+  </footer><!-- /.post-info -->
+</section>
+            <footer id="contentinfo" class="footer">
+                    <address id="about" class="vcard body">
+                    &copy; <a href="https://dnknth.github.io">Daniel Knauth</a>. Powered by <a href="http://getpelican.com/">Pelican</a>.
+                    </address><!-- /#about -->
+            </footer><!-- /#contentinfo -->
+        </div><!-- container -->
+    </body>
+</html>

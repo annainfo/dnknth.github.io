@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title><span class="dquo">&#8220;</span>Basic Apache&nbsp;configuration&#8221; - Apache 101</title>
+        <meta charset="utf-8" />
+        <link href="https://dnknth.github.io/theme/static/css/bootstrap.min.css" rel="stylesheet" />
+        <link href="https://dnknth.github.io/theme/static/css/style.css" rel="stylesheet" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    </head>
+
+    <body id="index" class="archive">
+        <div class="container">
+            <div class="header">
+                <ul class="nav nav-pills pull-right">
+                    <li class=""><a href="https://dnknth.github.io">Home</a></li>
+                    <li><a href="https://dnknth.github.io/archives.html">Archives</a></li>
+                </ul>
+                <h3 class="text-muted"><a href="https://dnknth.github.io">Apache 101</a></h3>
+				<h2 class="text-muted"></h2>
+             </div>
+<section id="content" class="article content">
+  <header>
+    <h2 class="entry-title">
+      <a href="https://dnknth.github.io/basic-apache-configuration.html" rel="bookmark"
+         title="Permalink to “Basic Apache configuration”"><span class="dquo">&#8220;</span>Basic Apache&nbsp;configuration&#8221;</a></h2>
+ 
+  </header>
+  
+     
+  <div class="entry-content">
+    <p>This is the first post in a short series about Apache web server configuration. Why yet another howto series? Apache is configuration is not <em>that</em> complicated and well described all over the&nbsp;web.</p>
+<p>I&#8217;ve used Apache for more than 20 years, both professionally and for hobby projects. The basic options are quite easy to understand, but a fast and secure website requires quite a few settings that are not included in the factory defaults. So let me explain how my best practices have evolved over&nbsp;time.</p>
+<p>This first post explains the very basics, namely the configuration directory structure and required modules. I mainly use Linux and Mac <span class="caps">OS</span>, so the examples should work on most flavours of Unix. On Windows with <span class="caps">XAMPP</span>, your mileage may&nbsp;vary. </p>
+<h1>Installation</h1>
+<p>Let&#8217;s assume you&#8217;ve just installed Apache from your favourite Linux distro, e.g.&nbsp;with </p>
+<div class="highlight"><pre><span></span>sudo apt-get install apache2
+</pre></div>
+
+
+<p>At the time of writing, the current version is 2.4, and that&#8217;s what you should be using. On Debian flavours, you&#8217;ll end up with a directory structure like&nbsp;this:</p>
+<div class="highlight"><pre><span></span>/etc/apache2/
+├── conf-available
+├── conf-enabled
+├── mods-available
+├── mods-enabled
+├── sites-available
+└── sites-enabled
+</pre></div>
+
+
+<p>Also, the commands <code>a2(en|dis)(conf|mod|site)</code> can be found in <code>/usr/sbin</code>.</p>
+<p>I ususally name the configuration file for each site exactly like the (main) <span class="caps">DNS</span> name, so <code>example.org</code> would end up in <code>/etc/apache2/sites-available/example.org</code>. This does not agree with Debian distro defaults, but let&#8217;s change this line near the end of <code>/etc/apache2/apache2.conf</code> from</p>
+<div class="highlight"><pre><span></span>    <span class="nb">IncludeOptional</span> sites-enabled/*.conf
+</pre></div>
+
+
+<p>to </p>
+<div class="highlight"><pre><span></span>    <span class="nb">IncludeOptional</span> sites-enabled/*
+</pre></div>
+
+
+<p>In almost every case, you&#8217;ll end up with more than one virtual host. Configurations tend to have repetitive sections, and it will pay off pretty soon if you collect them in one&nbsp;place:</p>
+<div class="highlight"><pre><span></span>sudo mkdir /etc/apache2/options
+</pre></div>
+
+
+<p>Why <code>options</code> instead of <code>conf-available</code>? Snippets in <code>conf-available</code> are pulled into the <strong>main</strong> server configuration (via links in <code>conf-enabled</code>), but our stuff will be included in <strong>virtual host</strong>&nbsp;configs.</p>
+<p>Next comes some global (default) configuration for all virtual hosts and the main server. It used to go in <code>/etc/apache2/httpd.conf</code>, but at least in Debian this is not present any longer. So, let&#8217;s put it in <code>/etc/apache2/conf-available/site.conf</code> (do not forget to enable it with <code>a2enconf site</code>). The initial content is simple enough, you&#8217;ll add more a bit&nbsp;later:</p>
+<div class="highlight"><pre><span></span>    <span class="nb">ServerName</span> localhost
+    <span class="nb">ServerAdmin</span> webmaster@example.org
+    <span class="nb">BufferedLogs</span> <span class="k">On</span>
+    <span class="nb">LogLevel</span> <span class="k">error</span>
+</pre></div>
+
+
+<h1>Modules</h1>
+<p>First and foremost, let&#8217;s get rid of <code>mod_access_compat</code>. It provides 2.2-compatible access control, and that was a bit of a mess. If you later happen to install an application that still relies on 2.2-style settings, please just fix it manually, it&#8217;s not&nbsp;complicated.</p>
+<div class="highlight"><pre><span></span>sudo a2dismod access_compat
+</pre></div>
+
+
+<p>Now, let&#8217;s clean up in <code>mods-enabled</code>. Some distros install way too much there. Who still uses <span class="caps">CGI</span>&nbsp;today?</p>
+<p>These ones are useful for the basic&nbsp;setup:</p>
+<ul>
+<li>alias</li>
+<li>auth_basic</li>
+<li>autoindex</li>
+<li>deflate</li>
+<li>dir</li>
+<li>env</li>
+<li>expires</li>
+<li>filter</li>
+<li>headers</li>
+<li>mime</li>
+<li>mpm_prefork</li>
+<li>negotiation</li>
+<li>setenvif</li>
+<li>socache_shmcb</li>
+<li>ssl</li>
+</ul>
+<p>You can always install more as&nbsp;needed.</p>
+<h1>Ports</h1>
+<p>Fot <span class="caps">HTTPS</span>, the server needs to listen on ports 80 and 443. On Debian, this is done in <code>/etc/apache2/ports.conf</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="nb">Listen</span> <span class="m">80</span>
+
+    <span class="nt">&lt;IfModule</span> <span class="s">ssl_module</span><span class="nt">&gt;</span>
+        <span class="nb">Listen</span> <span class="m">443</span>
+    <span class="nt">&lt;/IfModule&gt;</span>
+
+    <span class="nt">&lt;IfModule</span> <span class="s">mod_gnutls.c</span><span class="nt">&gt;</span>
+        <span class="nb">Listen</span> <span class="m">443</span>
+    <span class="nt">&lt;/IfModule&gt;</span>
+</pre></div>
+
+
+<p>Enabling <span class="caps">SSL</span> is covered in the <a href="security.html">next article</a>.</p>
+<h1>Logging</h1>
+<h2>Log&nbsp;files</h2>
+<p>With the default configuration, Apache will log to <code>/var/log/apache2/(access|error).log</code>, which are rotated on a weekly basis for about one year. This does not make much sense at all. The access log can get <em>huge</em> in a week, and errors that are older than a few weeks should have been fixed by&nbsp;now.</p>
+<p>So, let&#8217;s tune settings in <code>/etc/logrotate.d/apache2</code>. I use the following values, just alter to&nbsp;taste:</p>
+<div class="highlight"><pre><span></span>/var/log/apache2/*.log {
+    daily
+    missingok
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    # more stuff ....
+}
+</pre></div>
+
+
+<p>Next, have a look at <code>/etc/apache2/conf-available/other-vhosts-access-log.conf</code>. It&nbsp;says:</p>
+<div class="highlight"><pre><span></span>    <span class="c"># Define an access log for VirtualHosts that don&#39;t define their own logfile</span>
+    <span class="nb">CustomLog</span> ${APACHE_LOG_DIR}/other_vhosts_access.log vhost_combined
+</pre></div>
+
+
+<p>Virtual host logging is pretty useless e.g. for redirection sites, so  the way to go&nbsp;is:</p>
+<div class="highlight"><pre><span></span>a2disconf other-vhosts-access-log
+</pre></div>
+
+
+<h2>Access log&nbsp;format</h2>
+<p>Several log formats are usually <a href="https://httpd.apache.org/docs/2.4/logs.html#common">preconfigured</a> in <code>/etc/apache2/apache2.conf</code>, such as <code>common</code>, <code>combined</code> etc. Most people will go for the <code>combined</code> format, as it provides most details for&nbsp;analysis.</p>
+<p>This is fine <em>unless</em> your server relies on a reverse proxy for <span class="caps">SSL</span> termination. In that case, you&#8217;d end up logging the <span class="caps">IP</span> of the <strong>proxy</strong> server instead of the client <span class="caps">IP</span>. To get the correct (client) <span class="caps">IP</span>, add to <code>options/site.conf</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="nb">LogFormat</span> <span class="s2">&quot;%{X-Forwarded-For}i %l %u %t \&quot;%r\&quot; %&gt;s %O \&quot;%{Referer}i\&quot; \&quot;%{User-Agent}i\&quot;&quot;</span> combined_proxy
+</pre></div>
+
+
+<h2>Access log&nbsp;content</h2>
+<p>To selectively disable logging on a directory, location or request method, this snippet goes in <code>/etc/apache2/options/nolog.conf</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="nt">&lt;IfModule</span> <span class="s">mod_headers.c</span><span class="nt">&gt;</span>
+        <span class="nb">SetEnv</span> nolog
+    <span class="nt">&lt;/IfModule&gt;</span>
+</pre></div>
+
+
+<p>Use it like so, for example to exclude static resources (<a href="static-resources.html">more on this later</a>):</p>
+<div class="highlight"><pre><span></span>    <span class="nb">CustomLog</span> ${APACHE_LOG_DIR}/access.log combined env=!nolog
+
+    <span class="nt">&lt;Directory</span> <span class="s">&quot;/usr/local/share/fonts/&quot;</span><span class="nt">&gt;</span>
+        <span class="nb">Include</span> options/nolog.conf
+    <span class="nt">&lt;/Directory&gt;</span>
+</pre></div>
+
+
+<h1>Default character&nbsp;set</h1>
+<p>In 1993, when <a href="https://en.wikipedia.org/wiki/Tim_Berners-Lee">Tim B-L</a> (now Sir Tim, <span class="caps">KBE</span> etc.) invented the <span class="caps">WWW</span>, he was content with Europan script. So, <span class="caps">ISO</span>-8859-1 (<em>Latin-1</em>) became the de-facto standard, and as per <span class="caps">HTTP</span> specification, it still is&nbsp;today.</p>
+<p>Today, we have <a href="https://en.wikipedia.org/wiki/Unicode">Unicode</a>, and <span class="caps">UTF8</span> is a reasonable default pretty much everywhere outside of Asia. Add or edit in <code>/etc/apache2/conf-available/charset.conf</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="nb">AddDefaultCharset</span> UTF-8
+</pre></div>
+
+
+<p>Technically, this non-standard, but empirically the best choice for modern websites using European languages. Make sure to enable it&nbsp;with</p>
+<div class="highlight"><pre><span></span>a2enconf charset
+</pre></div>
+
+
+<h1>Wrap&nbsp;up</h1>
+<p>Let&#8217;s have a final look into <code>/etc/apache2/conf-enabled</code>. As of now, it should have exactly 3&nbsp;symlinks:</p>
+<ul>
+<li>charset.conf</li>
+<li>security.conf</li>
+<li>site.conf</li>
+</ul>
+<p>Wipe everything else with <code>a2disconf</code>, or just manually delete the&nbsp;symlinks.</p>
+<p>Now, you&#8217;ll want to test any changes&nbsp;with </p>
+<div class="highlight"><pre><span></span>sudo apache2ctl configtest
+</pre></div>
+
+
+<p>and only then commit them&nbsp;with</p>
+<div class="highlight"><pre><span></span>sudo apache2ctl graceful
+</pre></div>
+
+
+<p>I suggest to create aliases for these in your <code>.bashrc</code> or <code>.bash_aliases</code>, bacause you&#8217;ll need them frequently. Mine are called <code>AC</code> and <code>AG</code>.</p>
+<p>The <a href="security.html">next post</a> will look into security and <span class="caps">SSL</span>.</p>
+  </div><!-- /.entry-content -->
+   <footer class="post-info text-muted">
+    Posted on <abbr class="published" title="2018-05-30T16:02:04+02:00">
+      2018-05-30
+    </abbr>
+    <address class="vcard author">
+      by <a class="url fn" href="https://dnknth.github.io/author/daniel-knauth.html">Daniel Knauth</a>
+    </address>
+  </footer><!-- /.post-info -->
+</section>
+            <footer id="contentinfo" class="footer">
+                    <address id="about" class="vcard body">
+                    &copy; <a href="https://dnknth.github.io">Daniel Knauth</a>. Powered by <a href="http://getpelican.com/">Pelican</a>.
+                    </address><!-- /#about -->
+            </footer><!-- /#contentinfo -->
+        </div><!-- container -->
+    </body>
+</html>

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title><span class="dquo">&#8220;</span>Static&nbsp;Resources&#8221; - Apache 101</title>
+        <meta charset="utf-8" />
+        <link href="https://dnknth.github.io/theme/static/css/bootstrap.min.css" rel="stylesheet" />
+        <link href="https://dnknth.github.io/theme/static/css/style.css" rel="stylesheet" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    </head>
+
+    <body id="index" class="archive">
+        <div class="container">
+            <div class="header">
+                <ul class="nav nav-pills pull-right">
+                    <li class=""><a href="https://dnknth.github.io">Home</a></li>
+                    <li><a href="https://dnknth.github.io/archives.html">Archives</a></li>
+                </ul>
+                <h3 class="text-muted"><a href="https://dnknth.github.io">Apache 101</a></h3>
+				<h2 class="text-muted"></h2>
+             </div>
+<section id="content" class="article content">
+  <header>
+    <h2 class="entry-title">
+      <a href="https://dnknth.github.io/static-resources.html" rel="bookmark"
+         title="Permalink to “Static Resources”"><span class="dquo">&#8220;</span>Static&nbsp;Resources&#8221;</a></h2>
+ 
+  </header>
+  
+     
+  <div class="entry-content">
+    <p>Any run-of-the mill web site today uses a busload of static resources, typically&nbsp;including:</p>
+<ul>
+<li><a href="http://jquery.com">JQuery</a></li>
+<li><a href="https://getbootstrap.com">Bootstrap</a></li>
+<li>A few web fonts, maybe from <a href="https://fonts.google.com">Google</a>, or <a href="https://fontawesome.com">FontAwesome</a></li>
+</ul>
+<p>In a production environment, static resources will be served through a <span class="caps">CDN</span> or dedicated low-latency servers. For small to medium-sized sites, this distinction is rarely made, but there are good reasons to offload static&nbsp;files:</p>
+<ul>
+<li>They pollute your access&nbsp;logs,</li>
+<li>Page load times increase noticably if you just dump static into a&nbsp;directory. </li>
+</ul>
+<p>In short, Apache is not the best solution for static files, and you will do yourself a favour if you avoid the problem&nbsp;via:</p>
+<ul>
+<li>A <span class="caps">CDN</span>,</li>
+<li>Serving static from an <span class="caps">AWS</span> S3&nbsp;bucket,</li>
+<li>Offloading static to <a href="https://nginx.org">nginx</a> on another&nbsp;machine.</li>
+</ul>
+<p>If you absolutely must serve static, let&#8217;s say in a low-traffic site or test environment, then read&nbsp;on.</p>
+<h1>Logging</h1>
+<p>In a production environment, logging static content provides almost no useful additional information. On the contrary, it makes it difficult to see (and analyse) relevant page hits. To solve this, let&#8217;s add a snippet in <code>/etc/apache2/options/tag-static.conf</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="nt">&lt;IfModule</span> <span class="s">mod_headers.c</span><span class="nt">&gt;</span>
+        <span class="nb">SetEnvIfNoCase</span> Request_URI <span class="s2">&quot;\.(?:css|gif|jpe?g|js|png|svg|ttf|woff2?)$&quot;</span> nolog
+    <span class="nt">&lt;/IfModule&gt;</span>
+</pre></div>
+
+
+<p>This tags static via a request variable. You can then include it into virtual hosts like&nbsp;so:</p>
+<div class="highlight"><pre><span></span>    <span class="nb">Include</span> options/tag-static.conf
+</pre></div>
+
+
+<p>and selectively log&nbsp;with:</p>
+<div class="highlight"><pre><span></span>    <span class="nb">CustomLog</span> ${APACHE_LOG_DIR}/access.log combined env=!nolog
+</pre></div>
+
+
+<h1>Page load&nbsp;times</h1>
+<p>Let&#8217;s bring the page load time down in three&nbsp;steps:</p>
+<ol>
+<li>Extract static content into separate&nbsp;directories,</li>
+<li>Instruct the browser and intermediate proxies to cache&nbsp;it,</li>
+<li>Serve compressed&nbsp;files.</li>
+</ol>
+<h2>Extract static&nbsp;files</h2>
+<p>This one really depends on your web applications. Good web frameworks already <a href="https://docs.djangoproject.com/en/2.0/ref/contrib/staticfiles/">collect</a> static for easy deployment. Or if you use <a href="https://bower.io">Bower</a>, everything in <code>bower_components</code> is&nbsp;static.</p>
+<p>For the sake of this tutorial, let&#8217;s assume you worry about European <span class="caps">GDPR</span> and want to self-host some Google webfonts. They are already <a href="https://google-webfonts-helper.herokuapp.com/fonts">installed</a> in <code>/usr/local/share/fonts/google</code>.</p>
+<h2>Enable&nbsp;caching</h2>
+<p>Unless an <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Expires"><code>Expires</code></a> <span class="caps">HTTP</span> header is present, the browser will check on <em>every request</em> if a resource is still up-to-date. This is pointless for static files because they never change. For the web font scenario, add some <code>mod_expires</code> best-before&nbsp;dates:</p>
+<div class="highlight"><pre><span></span>    <span class="nt">&lt;Directory</span> <span class="s">/usr/local/share/fonts</span><span class="nt">&gt;</span>
+        <span class="nb">Require</span> <span class="k">all</span> granted
+        <span class="nb">AddType</span> font/woff2 .woff2
+
+        <span class="nt">&lt;IfModule</span> <span class="s">mod_expires.c</span><span class="nt">&gt;</span>
+            <span class="nb">ExpiresActive</span> <span class="k">On</span>
+            <span class="nb">ExpiresByType</span> text/css <span class="s2">&quot;access plus 1 month&quot;</span>
+            <span class="nb">ExpiresByType</span> application/font-sfnt <span class="s2">&quot;access plus 1 year&quot;</span>
+            <span class="nb">ExpiresByType</span> application/font-woff <span class="s2">&quot;access plus 1 year&quot;</span>
+            <span class="nb">ExpiresByType</span> font/woff2 <span class="s2">&quot;access plus 1 year&quot;</span>
+            <span class="nb">ExpiresByType</span> application/vnd.ms-fontobject <span class="s2">&quot;access plus 1 year&quot;</span>
+            <span class="nb">ExpiresByType</span> image/svg+xml <span class="s2">&quot;access plus 1 year&quot;</span>
+        <span class="nt">&lt;/IfModule&gt;</span>
+    <span class="nt">&lt;/Directory&gt;</span>
+</pre></div>
+
+
+<p>This means that browsers will attempt to cache stuff for the maximum recommended time, which is one year. In reality, they will come back more often, but certainly not every&nbsp;day.</p>
+<p>For other static Javascript / <span class="caps">CSS</span> / image resources, use something like&nbsp;this:</p>
+<div class="highlight"><pre><span></span>    <span class="nt">&lt;IfModule</span> <span class="s">mod_expires.c</span><span class="nt">&gt;</span>
+        <span class="nb">ExpiresActive</span> <span class="k">On</span>
+        <span class="nb">ExpiresByType</span> text/css <span class="s2">&quot;access plus 1 month&quot;</span>
+        <span class="nb">ExpiresByType</span> application/xslt+xml <span class="s2">&quot;access plus 1 month&quot;</span>
+        <span class="nb">ExpiresByType</span> text/javascript <span class="s2">&quot;access plus 1 month&quot;</span>
+        <span class="nb">ExpiresByType</span> application/javascript <span class="s2">&quot;access plus 1 month&quot;</span>
+        <span class="nb">ExpiresByType</span> application/x-javascript <span class="s2">&quot;access plus 1 month&quot;</span>
+        <span class="nb">ExpiresByType</span> image/gif <span class="s2">&quot;access plus 1 month&quot;</span>
+        <span class="nb">ExpiresByType</span> image/jpeg <span class="s2">&quot;access plus 1 month&quot;</span>
+        <span class="nb">ExpiresByType</span> image/png <span class="s2">&quot;access plus 1 month&quot;</span>
+        <span class="nb">ExpiresByType</span> image/x-icon <span class="s2">&quot;access plus 1 month&quot;</span>
+        <span class="nb">ExpiresByType</span> image/svg+xml <span class="s2">&quot;access plus 1 month&quot;</span>
+        <span class="nb">ExpiresByType</span> image/vnd.microsoft.icon <span class="s2">&quot;access plus 1 month&quot;</span>
+    <span class="nt">&lt;/IfModule&gt;</span>
+</pre></div>
+
+
+<p>You can verify in your browser&#8217;s developer tools (in the &#8216;Network&#8217; tab) that things are indeed cached and not transferred on page&nbsp;reload.</p>
+<h2>Compression</h2>
+<p>You probably have <code>mod_deflate</code> installed as <a href="basic-apache-configuration.html">recommended</a>. For static files, that is <em>not</em> the way to go, as it will compress files on <em>every</em> request. With dozens of files to download and compress for the initial page load, the <span class="caps">CPU</span> times for compression add up as extra&nbsp;latency.</p>
+<p>Most browsers support <code>gzip</code>, <code>deflate</code> and <code>br</code> transfer encodings. The way to go is to <em>manually</em> compress all static files on disk, and add a bit of <a href="http://httpd.apache.org/docs/2.4/en/mod/mod_negotiation.html">content negotiation</a> configuration to deliver the smallest possible alternative. This only takes a few milliseconds per&nbsp;request.</p>
+<p>For manual pre-compression, first get a modern&nbsp;compressor:</p>
+<div class="highlight"><pre><span></span>sudo apt-get install brotli
+</pre></div>
+
+
+<p>Brotli compression is already used in <code>woff</code>, <code>woff2</code> and <code>eot</code> web fonts, so do not bother to compress them further. For the repetitive work, add a little shell script in <code>/usr/local/bin/precompress</code> and make it&nbsp;executable:</p>
+<div class="highlight"><pre><span></span>    <span class="c1">#!/bin/sh</span>
+
+    <span class="nb">set</span> -e
+    <span class="nb">umask</span> <span class="m">0022</span>
+
+    die<span class="o">()</span> <span class="o">{</span>
+        <span class="nb">echo</span> <span class="nv">$*</span>
+        <span class="nb">exit</span> <span class="m">1</span>
+    <span class="o">}</span>
+
+    <span class="k">for</span> f <span class="p">;</span> <span class="k">do</span>
+        <span class="nv">ext</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">f</span><span class="p">##*.</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">case</span> <span class="s2">&quot;</span><span class="nv">$ext</span><span class="s2">&quot;</span> in
+            <span class="c1"># Skip internally compressed formats</span>
+            brotli<span class="p">|</span>eot<span class="p">|</span>gz<span class="p">|</span>png<span class="p">|</span>woff*<span class="p">|</span>zip<span class="o">)</span> <span class="k">continue</span> <span class="p">;;</span>
+        <span class="k">esac</span>
+
+        <span class="k">if</span> <span class="o">[</span> -f <span class="s2">&quot;</span><span class="nv">$f</span><span class="s2">.</span><span class="nv">$ext</span><span class="s2">&quot;</span> <span class="o">]</span> <span class="p">;</span> <span class="k">then</span>
+            mv <span class="s2">&quot;</span><span class="nv">$f</span><span class="s2">.</span><span class="nv">$ext</span><span class="s2">&quot;</span> <span class="s2">&quot;</span><span class="nv">$f</span><span class="s2">&quot;</span>
+            rm -f <span class="s2">&quot;</span><span class="nv">$f</span><span class="s2">.brotli&quot;</span> <span class="s2">&quot;</span><span class="nv">$f</span><span class="s2">.gz&quot;</span>
+        <span class="k">elif</span> <span class="o">[</span> -f <span class="s2">&quot;</span><span class="nv">$f</span><span class="s2">&quot;</span> <span class="o">]</span> <span class="p">;</span> <span class="k">then</span>
+            gzip -k <span class="s2">&quot;</span><span class="nv">$f</span><span class="s2">&quot;</span>
+            <span class="k">if</span> <span class="o">[</span> -x /usr/bin/brotli <span class="o">]</span> <span class="p">;</span> <span class="k">then</span>
+                brotli --input <span class="s2">&quot;</span><span class="nv">$f</span><span class="s2">&quot;</span> --output <span class="s2">&quot;</span><span class="nv">$f</span><span class="s2">.brotli&quot;</span>
+                chmod +r <span class="s2">&quot;</span><span class="nv">$f</span><span class="s2">.brotli&quot;</span>
+            <span class="k">fi</span>
+            mv <span class="s2">&quot;</span><span class="nv">$f</span><span class="s2">&quot;</span> <span class="s2">&quot;</span><span class="nv">$f</span><span class="s2">.</span><span class="nv">$ext</span><span class="s2">&quot;</span>
+        <span class="k">else</span>
+            die <span class="s2">&quot;</span><span class="nv">$f</span><span class="s2">.</span><span class="nv">$ext</span><span class="s2">&quot;</span> not found
+        <span class="k">fi</span>
+    <span class="k">done</span>
+</pre></div>
+
+
+<p>This will work on Debian <code>stretch</code>. Recent versions of <code>brotli</code> use different options, and you&#8217;ll need to adjust line 24 as per the <a href="http://manpages.ubuntu.com/manpages/bionic/en/man1/brotli.1.html">manual page</a>:</p>
+<div class="highlight"><pre><span></span>    brotli -S .brotli -k <span class="s2">&quot;</span><span class="nv">$f</span><span class="s2">&quot;</span>
+</pre></div>
+
+
+<p>Then head to <code>/usr/local/share/fonts/google</code> and </p>
+<div class="highlight"><pre><span></span>precompress *
+</pre></div>
+
+
+<p>That was not too hard, was it? Notice that compression takes a while, and imagine part of that happening on eacg request. By the way, the script works both ways. To decompress, just call is again without the added file extensions like&nbsp;so:</p>
+<div class="highlight"><pre><span></span>precompress roboto-v18-latin-100italic.svg
+</pre></div>
+
+
+<p>As for the web server configuration, even the <a href="https://httpd.apache.org/docs/2.4/mod/mod_deflate.html#precompressed">official documentation</a> on the topic proposes using <code>mod_rewrite</code>. This is pretty horrid, because it does not honour the browser&#8217;s preferred order of&nbsp;encodings.</p>
+<p>A better solution is based on <a href="https://kevinlocke.name/bits/2016/01/20/serving-pre-compressed-files-with-apache-multiviews/">multiviews</a>. Create <code>options/precompressed.conf</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="nt">&lt;IfModule</span> <span class="s">mod_negotiation.c</span><span class="nt">&gt;</span>
+        <span class="c"># Enable MultiViews for content negotiation</span>
+        <span class="nb">Options</span> +MultiViews
+
+        <span class="c"># Treat .gz as gzip encoding, not application/gzip type</span>
+        <span class="nb">RemoveType</span> .gz
+        <span class="nb">AddEncoding</span> gzip .gz
+        <span class="nb">AddEncoding</span> br   .brotli
+    <span class="nt">&lt;/IfModule&gt;</span>
+</pre></div>
+
+
+<p>and use it like&nbsp;so:</p>
+<div class="highlight"><pre><span></span>    <span class="nt">&lt;Directory</span> <span class="s">/usr/local/share/fonts</span><span class="nt">&gt;</span>
+        <span class="nb">Include</span> options/precompressed.conf
+    <span class="nt">&lt;/Directory&gt;</span>
+</pre></div>
+
+
+<p>To test, check your browser&#8217;s <em>Network</em> tab under <em>Developer tools</em>. For each compressed resource, the <code>Content-Location</code> response header reveals the negotiated&nbsp;variant.</p>
+<h2>Fallback&nbsp;options</h2>
+<p>If you must host an application whose sloppy programmers who did not bother to extract static files properly, pre-compression is not an option. For example, Wordpress ships with a truckload of plugins, each of which may bring its own Javascript files, scattered in dozens of&nbsp;directories.</p>
+<p>If you are runinng high-volume sites with crappy applications like this, you are out of luck, because that will throttle down your web servers and waste precious bandwidth for no effect. Go to management and ask for more&nbsp;OpEx.</p>
+<p>For sites with moderate traffic, you still have options, even if they are far from ideal. It boils down to trade <span class="caps">CPU</span> cycles (for on-the-fly compression) against wasting bandwith to dish out static. Initially, compression will boost page load times, but only until the CPUs get clogged. At any rate, page load times <em>won&#8217;t</em> be&nbsp;optimal.</p>
+<p>Create <code>/etc/apache2/conf-available/deflate.conf</code> like this (and don&#8217;t forget to enable&nbsp;it):</p>
+<div class="highlight"><pre><span></span>    <span class="nt">&lt;IfModule</span> <span class="s">mod_deflate.c</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;IfModule</span> <span class="s">mod_filter.c</span><span class="nt">&gt;</span>
+            <span class="nb">AddOutputFilterByType</span> DEFLATE text/html text/plain text/xml
+            <span class="nb">AddOutputFilterByType</span> DEFLATE application/x-javascript application/javascript application/ecmascript
+            <span class="nb">AddOutputFilterByType</span> DEFLATE text/css application/json
+            <span class="nb">AddOutputFilterByType</span> DEFLATE application/rss+xml application/svg+xml application/xml
+        <span class="nt">&lt;/IfModule&gt;</span>
+    <span class="nt">&lt;/IfModule&gt;</span>
+</pre></div>
+
+
+<p>You can include this in any virtual host, <code>&lt;Directory&gt;</code> or <code>&lt;Location&gt;</code> sections of your site. Just make sure that pre-compression and on-the-fly compression are not enabled both at once, because then <code>mod_deflate</code> will always kick&nbsp;in.</p>
+<p>The <a href="pretty-directory-listings.html">next post</a> will wrap things up with eye candy for directory&nbsp;listings.</p>
+  </div><!-- /.entry-content -->
+   <footer class="post-info text-muted">
+    Posted on <abbr class="published" title="2018-05-31T18:44:32+02:00">
+      2018-05-31
+    </abbr>
+    <address class="vcard author">
+      by <a class="url fn" href="https://dnknth.github.io/author/daniel-knauth.html">Daniel Knauth</a>
+    </address>
+  </footer><!-- /.post-info -->
+</section>
+            <footer id="contentinfo" class="footer">
+                    <address id="about" class="vcard body">
+                    &copy; <a href="https://dnknth.github.io">Daniel Knauth</a>. Powered by <a href="http://getpelican.com/">Pelican</a>.
+                    </address><!-- /#about -->
+            </footer><!-- /#contentinfo -->
+        </div><!-- container -->
+    </body>
+</html>

@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title><span class="dquo">&#8220;</span>Security&#8221; - Apache 101</title>
+        <meta charset="utf-8" />
+        <link href="https://dnknth.github.io/theme/static/css/bootstrap.min.css" rel="stylesheet" />
+        <link href="https://dnknth.github.io/theme/static/css/style.css" rel="stylesheet" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    </head>
+
+    <body id="index" class="archive">
+        <div class="container">
+            <div class="header">
+                <ul class="nav nav-pills pull-right">
+                    <li class=""><a href="https://dnknth.github.io">Home</a></li>
+                    <li><a href="https://dnknth.github.io/archives.html">Archives</a></li>
+                </ul>
+                <h3 class="text-muted"><a href="https://dnknth.github.io">Apache 101</a></h3>
+				<h2 class="text-muted"></h2>
+             </div>
+<section id="content" class="article content">
+  <header>
+    <h2 class="entry-title">
+      <a href="https://dnknth.github.io/security.html" rel="bookmark"
+         title="Permalink to “Security”"><span class="dquo">&#8220;</span>Security&#8221;</a></h2>
+ 
+  </header>
+  
+     
+  <div class="entry-content">
+    <p>The <a href="basic-apache-configuration.html">first part</a> of the series covered the basic Apache configuration. Before installing any sites, let&#8217;s go over the default settings and tighten them&nbsp;up.</p>
+<p>As a rule of thumb,  everything is disabled / forbidden by default, and access is selectively re-enabled on a directory / virtual host basis. Let&#8217;s get&nbsp;started.</p>
+<h1>Server&nbsp;security</h1>
+<p>Edit <code>conf-enabled/security.conf</code>. The most important setting is the following, it affects all sites, including virtual&nbsp;ones:</p>
+<div class="highlight"><pre><span></span>    <span class="c"># Disable access to the entire file system except for the directories that</span>
+    <span class="c"># are explicitly allowed later.</span>
+    <span class="c">#</span>
+    <span class="c"># This currently breaks the configurations that come with some web application</span>
+    <span class="c"># Debian packages.</span>
+    <span class="nt">&lt;Directory</span> <span class="s">/</span><span class="nt">&gt;</span>
+       <span class="nb">AllowOverride</span> <span class="k">None</span>
+       <span class="nb">Require</span> <span class="k">all</span> denied
+    <span class="nt">&lt;/Directory&gt;</span>
+</pre></div>
+
+
+<p>You can always fix access right issues later on (you <em>do</em> test your apps,don&#8217;t you?). In case of doubt, check the error&nbsp;log.</p>
+<p>Not really relevant to security, but who needs to know what exactly is&nbsp;installed?</p>
+<div class="highlight"><pre><span></span>     <span class="nb">ServerTokens</span> Prod
+     <span class="nb">ServerSignature</span> <span class="k">Off</span>
+     <span class="nb">TraceEnable</span> <span class="k">Off</span>
+</pre></div>
+
+
+<p>If you use 3rd party software from the interwebs, you probably also&nbsp;want:</p>
+<div class="highlight"><pre><span></span>    <span class="c"># If you use version control systems in your document root, you should</span>
+    <span class="c"># probably deny access to their directories. For example, for subversion:</span>
+    <span class="nt">&lt;DirectoryMatch</span> <span class="s">&quot;/\.svn&quot;</span><span class="nt">&gt;</span>
+       <span class="nb">Require</span> <span class="k">all</span> denied
+    <span class="nt">&lt;/DirectoryMatch&gt;</span>
+
+    <span class="nt">&lt;DirectoryMatch</span> <span class="s">&quot;/\.git&quot;</span><span class="nt">&gt;</span>
+       <span class="nb">Require</span> <span class="k">all</span> denied
+    <span class="nt">&lt;/DirectoryMatch&gt;</span>
+</pre></div>
+
+
+<p>The following is paranoid, but according to <a href="https://en.wikipedia.org/wiki/Andrew_Grove">Andy Grove</a>, the paranoid die last. At any rate, it is recommended by <a href="https://observatory.mozilla.org">Mozilla</a>:</p>
+<div class="highlight"><pre><span></span>    <span class="c"># Setting this header will prevent other sites from embedding pages from this</span>
+    <span class="c"># site as frames. This defends against clickjacking attacks.</span>
+    <span class="c"># Requires mod_headers to be enabled.</span>
+    <span class="nb">Header</span> set X-Frame-Options: <span class="s2">&quot;sameorigin&quot;</span>
+</pre></div>
+
+
+<p>This is why <code>mod_headers</code> was part of the <a href="basic-apache-configuration.html">basic settings</a>.</p>
+<h1><span class="caps">TLS</span>&nbsp;Encryption</h1>
+<p>This <a href="https://www.theguardian.com/us-news/the-nsa-files">day and age</a>, most websites use encryption, because your personal blog is none of <a href="https://www.nsa.gov"><span class="caps">NSA</span>&#8217;s</a> or <a href="https://www.gchq.gov.uk"><span class="caps">GCHQ</span>&#8217;s</a> business. Also, <span class="caps">HTTPS</span> support will give you a better ranking in search&nbsp;engines.</p>
+<h2>Ciphers</h2>
+<p>Let&#8217;s set up some reasonable defaults for <span class="caps">TLS</span>: Head over to Mozilla&#8217;s <a href="https://mozilla.github.io/server-side-tls/ssl-config-generator/"><span class="caps">SSL</span> Configuration Generator</a> to generate ciphers, using the &#8216;modern&#8217; profile. Put them in <code>/etc/apache2/options/ssl-modern.conf</code>. At the time of writing, you&#8217;ll get a straight <code>A+</code> grade on <a href="https://www.ssllabs.com/ssltest/">SSLLabs</a> and <a href="https://tls.imirhil.fr">CryptCheck</a>&nbsp;with:</p>
+<div class="highlight"><pre><span></span>    <span class="nt">&lt;IfModule</span> <span class="s">mod_ssl.c</span><span class="nt">&gt;</span>
+        <span class="nb">SSLEngine</span> <span class="k">On</span>
+
+        <span class="nb">SSLVerifyClient</span> <span class="k">none</span>
+        <span class="nb">SSLStrictSNIVHostCheck</span> <span class="k">off</span>
+
+        <span class="c"># modern configuration, tweak to your needs</span>
+        <span class="c"># https://mozilla.github.io/server-side-tls/ssl-config-generator/?server=apache-2.4.18&amp;openssl=1.0.1f&amp;hsts=yes&amp;profile=modern</span>
+        <span class="nb">SSLProtocol</span>             <span class="k">ALL</span> -SSLv2 -SSLv3 -TLSv1 -TLSv1.1
+        <span class="nb">SSLCipherSuite</span>          ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256
+
+        <span class="nb">SSLHonorCipherOrder</span>     <span class="k">on</span>
+        <span class="nb">SSLCompression</span>          <span class="k">off</span>
+        <span class="nb">SSLSessionTickets</span>       <span class="k">off</span>
+
+        <span class="nt">&lt;FilesMatch</span> <span class="s">&quot;\.(cgi|shtml|phtml|php)$&quot;</span><span class="nt">&gt;</span>
+            <span class="nb">SSLOptions</span> +StdEnvVars
+        <span class="nt">&lt;/FilesMatch&gt;</span>
+    <span class="nt">&lt;/IfModule&gt;</span>
+</pre></div>
+
+
+<p>It is safe to use different cipher suites in different virtual hosts, even with <span class="caps">SNI</span>.</p>
+<p>No cipher will last forever, better check them&nbsp;occasionally.</p>
+<h2>Certificates</h2>
+<p>You need a certificate for each site name. The fastest and cheapest way for basic certs is <a href="https://letsencrypt.org">LetsEncrypt</a>. These are sufficient for transport-level security with domain validation, but lack the more official-looking organization and extended validation levels. Install the <code>certbot</code> tool:</p>
+<div class="highlight"><pre><span></span>sudo apt-get install certbot
+</pre></div>
+
+
+<p>If you are a first-time Letsencrypt user, start off&nbsp;with:</p>
+<div class="highlight"><pre><span></span>sudo certbot register
+</pre></div>
+
+
+<p>Add this to <code>/etc/apache2/conf-available/site.conf</code>, you&#8217;ll need it in a minute for <code>certbot</code><span class="quo">&#8216;</span>s <code>--webroot</code> plugin:</p>
+<div class="highlight"><pre><span></span>    <span class="c"># Use the same .well-known directory for all virtual hosts</span>
+    <span class="nb">Alias</span> /.well-known <span class="sx">/var/www/.well-known</span>
+</pre></div>
+
+
+<p>The following goes into <code>.bashrc</code> or <code>.bash_aliases</code>:</p>
+<div class="highlight"><pre><span></span>alias letsencrypt=&#39;sudo certbot --webroot -w /var/www&#39; --rsa-key-size 4096
+</pre></div>
+
+
+<p>Assuming that <span class="caps">DNS</span> names for <code>www.example.org</code> and <code>example.org</code> are already set up and point to our <span class="caps">IP</span>, you can install a cert (into <code>/etc/letsencrypt/live/example.org</code>)&nbsp;with:</p>
+<div class="highlight"><pre><span></span>letsencrypt certonly -d example.org -d www.example.org
+</pre></div>
+
+
+<p>The corresponding <span class="caps">TLS</span> configuration in <code>/etc/apache2/sites-available/example.org</code> looks like this (logging and other stuff&nbsp;omitted):</p>
+<div class="highlight"><pre><span></span>    <span class="nt">&lt;VirtualHost</span> <span class="s">*:443</span><span class="nt">&gt;</span>
+
+        <span class="nb">ServerName</span> example.org
+        <span class="nb">ServerAlias</span> www.example.org
+        <span class="nb">ServerAdmin</span> webmaster@example.org
+        <span class="nb">DocumentRoot</span> <span class="sx">/var/www</span>
+
+        <span class="nb">Include</span> options/ssl-modern.conf
+
+        <span class="nt">&lt;IfModule</span> <span class="s">mod_ssl.c</span><span class="nt">&gt;</span>
+            <span class="nb">SSLCertificateFile</span>    <span class="sx">/etc/letsencrypt/live/example.org/cert.pem</span>
+            <span class="nb">SSLCertificateKeyFile</span> <span class="sx">/etc/letsencrypt/live/example.org/privkey.pem</span>
+            <span class="nb">SSLCACertificateFile</span>  <span class="sx">/etc/letsencrypt/live/example.org/chain.pem</span>
+        <span class="nt">&lt;/IfModule&gt;</span>
+
+    <span class="nt">&lt;/VirtualHost&gt;</span>
+</pre></div>
+
+
+<h2><span class="caps">OCSP</span>&nbsp;Stapling</h2>
+<p>With <a href="http://httpd.apache.org/docs/2.4/ssl/ssl_howto.html#ocspstapling"><span class="caps">OSCP</span> stapling</a> the certificate revocation status is sent along during the <span class="caps">TLS</span> handshake. This improves security and speeds up the initial connection.
+Add the following to <code>conf-enabled/oscp-stapling.conf</code> (don&#8217;t forget to&nbsp;enable):</p>
+<div class="highlight"><pre><span></span>    <span class="c"># OCSP Stapling, only in httpd 2.3.3 and later</span>
+    <span class="nt">&lt;IfModule</span> <span class="s">mod_ssl.c</span><span class="nt">&gt;</span>
+        <span class="nb">SSLUseStapling</span>          <span class="k">on</span>
+        <span class="nb">SSLStaplingResponderTimeout</span> <span class="m">5</span>
+        <span class="nb">SSLStaplingReturnResponderErrors</span> <span class="k">off</span>
+        <span class="nb">SSLStaplingCache</span>        shmcb:/var/run/ocsp(128000)
+    <span class="nt">&lt;/IfModule&gt;</span>
+</pre></div>
+
+
+<p>Test it&nbsp;with:</p>
+<div class="highlight"><pre><span></span>openssl s_client -connect example.org:443 -status -servername example.org
+</pre></div>
+
+
+<p>and look&nbsp;for:</p>
+<div class="highlight"><pre><span></span>OCSP response: 
+======================================
+OCSP Response Data:
+    OCSP Response Status: successful (0x0)
+    Response Type: Basic OCSP Response
+...
+    Cert Status: Good
+</pre></div>
+
+
+<h1>Strict Transport Security (<span class="caps">HSTS</span>)</h1>
+<p>Mixing <span class="caps">HTTP</span> and <span class="caps">HTTPS</span> is not a good idea. Browsers will complain, and pages may not load completely. Therefore, let&#8217;s aim for <span class="caps">HTTPS</span> <strong>only</strong>, by adding 2 things to the web server&nbsp;configuration:</p>
+<ol>
+<li>Redirect all <span class="caps">HTTP</span> requests to <span class="caps">HTTPS</span></li>
+<li>Add response headers telling browsers to always use <span class="caps">TLS</span></li>
+</ol>
+<h2>Redirect to <span class="caps">HTTPS</span></h2>
+<p>To force HTTPs, add a snippet <code>options/https-redirect.conf</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="c"># Redirect to HTTPS</span>
+    <span class="nb">DocumentRoot</span> <span class="sx">/var/www</span>
+
+    <span class="nt">&lt;IfModule</span> <span class="s">mod_rewrite.c</span><span class="nt">&gt;</span>
+        <span class="nb">RewriteEngine</span> <span class="k">On</span>
+        <span class="c"># RewriteCond %{HTTPS} off</span>
+        <span class="nb">RewriteRule</span> ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+    <span class="nt">&lt;/IfModule&gt;</span>
+</pre></div>
+
+
+<p>Then add to <code>/etc/apache2/sites-available/example.org</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="nt">&lt;VirtualHost</span> <span class="s">*:80</span><span class="nt">&gt;</span>
+        <span class="nb">ServerName</span>   example.org
+        <span class="nb">ServerAlias</span>  www.example.org
+        <span class="nb">ServerAdmin</span>  webmaster@example.org
+        <span class="nb">Include</span>      options/https-redirect.conf
+    <span class="nt">&lt;/VirtualHost&gt;</span>
+</pre></div>
+
+
+<h2><span class="caps">HSTS</span> response&nbsp;headers</h2>
+<p>The next snippet will be included in <code>&lt;VirtualHost *:443&gt;</code> sections. Lets&#8217;s put it in <code>options/hsts.conf</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="nt">&lt;IfModule</span> <span class="s">mod_headers.c</span><span class="nt">&gt;</span>
+       <span class="nb">Header</span> always set Strict-Transport-Security <span class="s2">&quot;max-age=15768000; includeSubDomains&quot;</span>
+
+       <span class="c"># Always ensure Cookies have &quot;Secure&quot; set (JAH 2012/1)</span>
+       <span class="nb">Header</span> edit Set-Cookie (?i)^(.*)(;\s*secure)??((\s*;)?(.*)) <span class="s2">&quot;$1; Secure$3$4&quot;</span>
+    <span class="nt">&lt;/IfModule&gt;</span>
+</pre></div>
+
+
+<p><span class="caps">HSTS</span> is not easily revokable, because browsers that have seen the header will use <span class="caps">HTTPS</span> exclusively for the duration of <code>max-age</code>. Enable it only if you are positive that <span class="caps">HTTP</span> (without encryption) is not&nbsp;needed.</p>
+<h1>Content&nbsp;security</h1>
+<p>Modern browsers honour <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy">Content Security Policy</a> headers sent by the web server. That&#8217;s great, because it lets you declare <em>exactly</em> what&#8217;s allowed for your web application, and mitigates all sorts of <a href="https://en.wikipedia.org/wiki/Cross-site_scripting"><span class="caps">XSS</span></a> and frame hijacking&nbsp;attacks. </p>
+<p>As a secure baseline, add this is <code>options/csp-strict.conf</code>:</p>
+<div class="highlight"><pre><span></span>    <span class="nb">Header</span> setifempty Content-Security-Policy <span class="err">&quot;</span>\
+        default-src &#39;none&#39;;\
+        base-uri &#39;none&#39;;\
+        form-action &#39;self&#39;;\
+        frame-ancestors &#39;self&#39;;\
+        connect-src &#39;self&#39;;\
+        font-src &#39;self&#39;;\
+        frame-src &#39;self&#39;;\
+        img-src &#39;self&#39;;\
+        media-src &#39;self&#39;;\
+        object-src &#39;self&#39;;\
+        <span class="k">script</span>-src &#39;self&#39;;\
+        style-src &#39;self&#39;;\
+    <span class="err">&quot;</span>
+</pre></div>
+
+
+<p>It ensures that all resources are loaded from your site. Include it in your virtual hosts like&nbsp;so:</p>
+<div class="highlight"><pre><span></span>    <span class="nb">Include</span> options/csp-strict.conf
+</pre></div>
+
+
+<p>Of course, there are always exceptions, especially if you run 3rd party apps with special needs like inline styles and Javascript. For these, put into <code>options/csp-lenient.conf</code> (adjust to&nbsp;taste):</p>
+<div class="highlight"><pre><span></span>    <span class="nb">Header</span> set Content-Security-Policy <span class="err">&quot;</span>\
+        default-src &#39;none&#39;;\
+        base-uri &#39;none&#39;;\
+        form-action &#39;self&#39;;\
+        frame-ancestors &#39;self&#39;;\
+        child-src &#39;self&#39;;\
+        connect-src &#39;self&#39;;\
+        font-src &#39;self&#39;;\
+        frame-src &#39;self&#39;;\
+        img-src data: &#39;self&#39;;\
+        media-src &#39;self&#39;;\
+        object-src &#39;self&#39;;\
+        <span class="k">script</span>-src &#39;self&#39; &#39;unsafe-inline&#39; &#39;unsafe-eval&#39;;\
+        style-src &#39;self&#39; &#39;unsafe-inline&#39;;\
+    <span class="err">&quot;</span>
+</pre></div>
+
+
+<p>Then you can override the secure default with the relaxed option on a directory like&nbsp;so:</p>
+<div class="highlight"><pre><span></span>    <span class="nt">&lt;Directory</span> <span class="s">/usr/local/share/my/unsafe/app</span><span class="nt">&gt;</span>
+        <span class="nb">Include</span> options/csp-lenient.conf
+    <span class="nt">&lt;/Directory&gt;</span>
+</pre></div>
+
+
+<p>The <a href="static-resources.html">next post</a> explains how to serve static files at top&nbsp;speed.</p>
+  </div><!-- /.entry-content -->
+   <footer class="post-info text-muted">
+    Posted on <abbr class="published" title="2018-05-30T20:40:55+02:00">
+      2018-05-30
+    </abbr>
+    <address class="vcard author">
+      by <a class="url fn" href="https://dnknth.github.io/author/daniel-knauth.html">Daniel Knauth</a>
+    </address>
+  </footer><!-- /.post-info -->
+</section>
+            <footer id="contentinfo" class="footer">
+                    <address id="about" class="vcard body">
+                    &copy; <a href="https://dnknth.github.io">Daniel Knauth</a>. Powered by <a href="http://getpelican.com/">Pelican</a>.
+                    </address><!-- /#about -->
+            </footer><!-- /#contentinfo -->
+        </div><!-- container -->
+    </body>
+</html>
